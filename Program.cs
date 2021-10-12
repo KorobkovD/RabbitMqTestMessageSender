@@ -8,28 +8,35 @@ namespace RabbitMqTestMessageSender
 {
     internal static class Program
     {
-        private static PaymentInfoMessage MakeMessage()
+        private const string QueueName = "payler-core-yandex-pay-notifications";
+
+        private static YandexNotification MakeMessage()
         {
             var randomizer = new Random();
 
-            return new PaymentInfoMessage
+            return new YandexNotification
             {
-                YandexMessageId = Guid.NewGuid().ToString(),
-                DealStatus = DealStatus.Charged, 
-                YandexReasonCode = null,
+                MessageId = Guid.NewGuid().ToString(),
+                DealStatus = DealStatus.Charged,
+                ReasonCode = null,
                 Reason = null,
-                MerchantName = $"Test {randomizer.Next(1001)}",
-                Amount = randomizer.Next(),
+                RefundAmount = randomizer.Next(),
                 Currency = "RUB",
-                CardNumber = $"{randomizer.Next(10000).ToString(),4}xxxxxxxx{randomizer.Next(10000).ToString(),4}",
-                Kind = "Payment",
-                Product = $"Product {randomizer.Next()}",
                 Rrn = "1234567890",
                 Time = DateTime.Now, //.ToString("dd.MM.yyyy HH:mm:ss"),
                 AuthCode = randomizer.Next(1000).ToString().PadLeft(3),
                 OrderId = Guid.NewGuid().ToString(),
-                CardHolderName = "Card Holder",
-                UserEnteredEmail = "holder@mail.domain"
+                Eci = Guid.NewGuid().ToString(),
+                PaymentSystem = "Visa"
+            };
+        }
+
+        private static SomeUnexpectedMessage MakeUnexpectedMessage()
+        {
+            return new SomeUnexpectedMessage
+            {
+                Date = DateTime.Now,
+                Message = "Oops, that was unexpected..."
             };
         }
 
@@ -37,55 +44,39 @@ namespace RabbitMqTestMessageSender
         {
             Console.WriteLine("RabbitMQ bus preparation...");
 
-            // var bus = RabbitHutch.CreateBus("host=localhost");
-            Console.Write("Press '+' to publish random message to the RabbitMQ: ");
-            var key = Console.ReadLine();
-            // while (key == "+")
-            // {
-            //     Console.Clear();
-            //     var message = MakeMessage();
-            //     Console.WriteLine("Generated message:");
-            //     Console.WriteLine(JsonSerializer.Serialize(message));
-            //     Console.WriteLine("Publishing message to the query...");
-            //
-            //     bus.PubSub.Publish(message);
-            //     //    .ContinueWith(task =>
-            //     // {
-            //     //     // this only checks that the task finished
-            //     //     // IsCompleted will be true even for tasks in a faulted state
-            //     //     // we use if (task.IsCompleted && !task.IsFaulted) to check for success
-            //     //     if (task.IsCompleted) 
-            //     //     {
-            //     //         Console.WriteLine("{0} Completed", task.Id);
-            //     //     }
-            //     //     if (task.IsFaulted)
-            //     //     {
-            //     //         Console.WriteLine(task.Exception);
-            //     //     }
-            //     // });
-            //
-            //     Console.Write("Publish another message? ");
-            //     key = Console.ReadLine();
-            // }
-
             using (var bus = RabbitHutch.CreateBus("host=localhost;username=guest;password=guest").Advanced)
             {
-                var exchange = bus.ExchangeDeclare("YandexPay", ExchangeType.Topic);
-                var queue = bus.QueueDeclare("YandexPay");
-                bus.Bind(exchange, queue, "YandexPay");
-                while (key == "+")
+                var exchange = bus.ExchangeDeclare(QueueName, ExchangeType.Topic);
+                var queue = bus.QueueDeclare(QueueName);
+                bus.Bind(exchange, queue, QueueName);
+                Console.WriteLine($"Press '+' to publish random {nameof(YandexNotification)} message,");
+                Console.Write($"press 'u' to publish {nameof(SomeUnexpectedMessage)} to the RabbitMQ: ");
+                var key = Console.ReadLine();
+                while (key is "+" or "u")
                 {
                     Console.Clear();
-                    var message = MakeMessage();
-                    Console.WriteLine("Generated message:");
-                    Console.WriteLine(JsonSerializer.Serialize(message));
-                    Console.WriteLine("Publishing message to the query...");
-                    bus.Publish(exchange, "YandexPay", true, new Message<PaymentInfoMessage>(message));
-            
+                    switch (key)
+                    {
+                        case "+":
+                            var message = MakeMessage();
+                            Console.WriteLine("Generated message:");
+                            Console.WriteLine(JsonSerializer.Serialize(message));
+                            Console.WriteLine("Publishing message to the query...");
+                            bus.Publish(exchange, QueueName, true, new Message<YandexNotification>(message));
+                            break;
+                        case "u":
+                            var unexpectedMessage = MakeUnexpectedMessage(); 
+                            Console.WriteLine("Generated unexpected message:");
+                            Console.WriteLine(JsonSerializer.Serialize(unexpectedMessage));
+                            Console.WriteLine("Publishing message to the query...");
+                            bus.Publish(exchange, QueueName, true, new Message<SomeUnexpectedMessage>(unexpectedMessage));
+                            break;
+                    }
+
                     Console.Write("Publish another message? ");
                     key = Console.ReadLine();
                 }
-            
+
                 Console.WriteLine("Disposing bus...");
             }
 
