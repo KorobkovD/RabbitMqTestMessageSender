@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Domain.Entities.Payler;
 using MassTransit;
@@ -10,6 +9,7 @@ namespace RabbitMqTestMessageSender
     internal static class Program
     {
         private const string QueueName = "payler-core-yandex-pay-notifications";
+        private const string ExchangeName = "payler-core-yandex-pay-notifications-exchange";
 
         private static YandexNotification MakeMessage()
         {
@@ -54,15 +54,13 @@ namespace RabbitMqTestMessageSender
                     configurator.Username("guest");
                     configurator.Password("guest");
                 });
-                // cfg.Publish<YandexNotification>(conf =>
-                // {
-                //     conf.Durable = false;
-                //     // conf.ExchangeType = "fanout";
-                // });
+                cfg.Publish<YandexNotification>(conf =>
+                {
+                     // conf.BindQueue(ExchangeName, QueueName);
+                });
             });
-            // var source = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            await busControl.StartAsync(/*source.Token*/);
+            await busControl.StartAsync( /*source.Token*/);
             Console.WriteLine($"Press '+' to publish random {nameof(YandexNotification)} message,");
             Console.Write($"press 'u' to publish {nameof(SomeUnexpectedMessage)} to the RabbitMQ: ");
             // var endpoint = await busControl.GetSendEndpoint(new Uri($"queue:{QueueName}"));
@@ -96,7 +94,7 @@ namespace RabbitMqTestMessageSender
             }
 
             Console.WriteLine("Disposing bus...");
-            await busControl.StopAsync(/*source.Token*/);
+            await busControl.StopAsync( /*source.Token*/);
             Console.WriteLine("Application finished");
 
             // using (var bus = RabbitHutch.CreateBus("host=localhost;username=guest;password=guest").Advanced)
