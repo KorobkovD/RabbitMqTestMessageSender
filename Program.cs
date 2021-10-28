@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Domain.Entities.Payler;
 using MassTransit;
+using RabbitMqTestMessageSender.RabbitFromCore;
 
 namespace RabbitMqTestMessageSender
 {
@@ -14,13 +15,13 @@ namespace RabbitMqTestMessageSender
 
         private const string RealMessageId =
             "1:gAAAAABhVuUF7mkqLPqp5AfT48Ns0pGuESogFo1G0DahVKpVLd1le1nVv3Gfykvm-pxxibnhTrjjsZtHcxHCZmheZn0t6FGrCWbmxjLWZDggL5dywfBmboQPqG9f_0uD7FPn_eYhrasg";
+
         private const string RealMessageIdConsoleKey = "++";
-        private static readonly List<string> AcceptedConsoleKeys = new() { "+", "u", RealMessageIdConsoleKey };
+        private static readonly List<string> AcceptedConsoleKeys = new() { "+", "i", "c", RealMessageIdConsoleKey };
 
         private static YandexNotification MakeMessage(bool useRealMessageId = false)
         {
-            var randomizer = new Random();
-
+            Random randomizer = new();
             return new YandexNotification
             {
                 MessageId = useRealMessageId ? RealMessageId : Guid.NewGuid().ToString(),
@@ -29,8 +30,8 @@ namespace RabbitMqTestMessageSender
                 Reason = null,
                 RefundAmount = randomizer.Next(),
                 Currency = "RUB",
-                Rrn = "1234567890",
-                Time = DateTime.Now, //.ToString("dd.MM.yyyy HH:mm:ss"),
+                Rrn = randomizer.Next(0, 999999999).ToString().PadRight(12, '0'),
+                Time = DateTime.Now,
                 AuthCode = randomizer.Next(1000).ToString().PadLeft(3),
                 OrderId = Guid.NewGuid().ToString(),
                 Eci = Guid.NewGuid().ToString(),
@@ -38,13 +39,16 @@ namespace RabbitMqTestMessageSender
             };
         }
 
-        private static SomeUnexpectedMessage MakeUnexpectedMessage()
+        private static string MakeIncorrectSerializedMessageFromCore()
         {
-            return new SomeUnexpectedMessage
-            {
-                Date = DateTime.Now,
-                Message = "Oops, that was unexpected..."
-            };
+            var notification = new YandexMessageFromCore(true);
+            return JsonSerializer.Serialize(notification);
+        }
+
+        private static string MakeSerializedMessageFromCore()
+        {
+            var notification = new YandexMessageFromCore();
+            return JsonSerializer.Serialize(notification);
         }
 
         private static async Task Main(string[] args)
@@ -62,14 +66,13 @@ namespace RabbitMqTestMessageSender
                 });
                 cfg.Publish<YandexNotification>(conf =>
                 {
-                     // conf.BindQueue(ExchangeName, QueueName);
+                    // conf.BindQueue(ExchangeName, QueueName);
                 });
             });
 
             await busControl.StartAsync( /*source.Token*/);
-            Console.WriteLine($"Type '+' to publish random {nameof(YandexNotification)} message,");
-            Console.WriteLine($"or type '++' to publish random {nameof(YandexNotification)} message with real MessageId,");
-            Console.Write($"or type 'u' to publish {nameof(SomeUnexpectedMessage)} to the RabbitMQ: ");
+            Console.Clear();
+            PrintMan();
             // var endpoint = await busControl.GetSendEndpoint(new Uri($"queue:{QueueName}"));
             var key = Console.ReadLine();
 
@@ -81,24 +84,33 @@ namespace RabbitMqTestMessageSender
                     case RealMessageIdConsoleKey:
                     case "+":
                         // Если введено ++, то используем реальный идентификатор сообщения
-                        var message = MakeMessage(key == "++");
+                        var message = MakeMessage(key == RealMessageIdConsoleKey);
                         Console.WriteLine("Generated message:");
                         Console.WriteLine(JsonSerializer.Serialize(message));
                         Console.WriteLine("Publishing message to the query...");
                         // await endpoint.Send(message/*, source.Token*/);
                         await busControl.Publish(message);
                         break;
-                    case "u":
-                        var unexpectedMessage = MakeUnexpectedMessage();
-                        Console.WriteLine("Generated unexpected message:");
-                        Console.WriteLine(JsonSerializer.Serialize(unexpectedMessage));
+                    case "i":
+                        var incorrectMessage = MakeIncorrectSerializedMessageFromCore();
+                        Console.WriteLine("Generated core message:");
+                        Console.WriteLine(incorrectMessage);
                         Console.WriteLine("Publishing message to the query...");
-                        // await endpoint.Send(unexpectedMessage/*, source.Token*/);
-                        await busControl.Publish(unexpectedMessage);
+                        RabbitNotificationManager.Instance
+                                                 .Notify(QueueName, new Dictionary<string, string>(), incorrectMessage);
+                        break;
+                    case "c":
+                        var coreMessage = MakeSerializedMessageFromCore();
+                        Console.WriteLine("Generated core message:");
+                        Console.WriteLine(coreMessage);
+                        Console.WriteLine("Publishing message to the query...");
+                        RabbitNotificationManager.Instance
+                                                 .Notify(QueueName, new Dictionary<string, string>(), coreMessage);
                         break;
                 }
 
-                Console.Write("Publish another message? ");
+                Console.WriteLine();
+                PrintMan();
                 key = Console.ReadLine();
             }
 
@@ -144,6 +156,17 @@ namespace RabbitMqTestMessageSender
 
             // Console.WriteLine("Disposing bus...");
             // Console.WriteLine("Application finished");
+        }
+
+        private static void PrintMan()
+        {
+            Console.WriteLine($"Type '+' to publish random {nameof(YandexNotification)} message using MT,");
+            Console.WriteLine($"type '++' to publish random {nameof(YandexNotification)} " +
+                              $"message with real MessageId using MT,");
+            Console.WriteLine($"type 'c' to publish random {nameof(YandexMessageFromCore)} " +
+                              $"message using default client,");
+            Console.Write($"type 'i' to publish incorrect {nameof(YandexMessageFromCore)} " +
+                          "using default client to the RabbitMQ: ");
         }
     }
 }
