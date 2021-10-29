@@ -43,20 +43,21 @@ namespace RabbitMqTestMessageSender
 
         public string AuthCode { get; set; }
 
-        public YandexMessageFromCore(bool shouldBeIncorrect = false)
+        public YandexMessageFromCore(bool shouldBeIncorrect = false, DealStatus dealStatus = DealStatus.Charged)
         {
             var Randomizer = new Random();
             
             OrderId = Guid.NewGuid().ToString();
             // DealStatus = shouldBeIncorrect ? "AAAA" : "Charged";
-            DealStatus = shouldBeIncorrect ? (DealStatus)777 : DealStatus.Charged;
+            DealStatus = shouldBeIncorrect ? (DealStatus)777 : dealStatus;
             // Amount = 200,
             Currency = "RUB";
             PaymentSystem = "VISA";
             Rrn = Randomizer.Next(0, 999999999).ToString().PadRight(12, '0');
             AuthCode = Randomizer.Next(1000).ToString().PadLeft(3);
-            Reason = string.Empty;
-            ReasonCode = string.Empty;
+            Amount = Randomizer.Next(100, 100000);
+            Reason = dealStatus == DealStatus.Rejected ? "Payment failed" : string.Empty;
+            ReasonCode = dealStatus == DealStatus.Rejected ? "REJECTED" : string.Empty;
             Eci = null;
             MessageId = Guid.NewGuid().ToString();
             Time = DateTime.Now;
