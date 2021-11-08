@@ -50,6 +50,12 @@ namespace RabbitMqTestMessageSender
             var notification = new YandexMessageFromCore(dealStatus: dealStatus);
             return JsonSerializer.Serialize(notification);
         }
+        
+        private static string MakeSerializedMessageFromCore(PaylerNotificationKind notificationKind)
+        {
+            var notification = new YandexMessageFromCore(notificationKind: notificationKind);
+            return JsonSerializer.Serialize(notification);
+        }
 
         private static async Task Main(string[] args)
         {
@@ -76,7 +82,7 @@ namespace RabbitMqTestMessageSender
             // var endpoint = await busControl.GetSendEndpoint(new Uri($"queue:{QueueName}"));
             var key = Console.ReadLine();
 
-            while (key != null && (AcceptedConsoleKeys.Contains(key) || key.StartsWith('c')))
+            while (key != null && (AcceptedConsoleKeys.Contains(key) || key.StartsWith('c') || key.StartsWith('k')))
             {
                 Console.Clear();
                 switch (key)
@@ -112,6 +118,23 @@ namespace RabbitMqTestMessageSender
                             }
 
                             var coreMessage = MakeSerializedMessageFromCore(defaultDealStatus);
+                            Console.WriteLine("Generated core message:");
+                            Console.WriteLine(coreMessage);
+                            Console.WriteLine("Publishing message to the query...");
+                            RabbitNotificationManager.Instance
+                                                     .Notify(QueueName, new Dictionary<string, string>(), coreMessage);
+                        }
+                        
+                        if (key.StartsWith('k'))
+                        {
+                            var defaultKind = PaylerNotificationKind.Charge;
+                            var arguments = key.Split(' ');
+                            if (arguments.Length > 1 && byte.TryParse(arguments[1], out var byteStatus))
+                            {
+                                defaultKind = (PaylerNotificationKind)byteStatus;
+                            }
+
+                            var coreMessage = MakeSerializedMessageFromCore(defaultKind);
                             Console.WriteLine("Generated core message:");
                             Console.WriteLine(coreMessage);
                             Console.WriteLine("Publishing message to the query...");
@@ -177,7 +200,9 @@ namespace RabbitMqTestMessageSender
             Console.WriteLine($"type '++' to publish random {nameof(YandexNotification)} " +
                               "message with real MessageId using MT,");
             Console.WriteLine($"type 'c' [status_num] to publish random {nameof(YandexMessageFromCore)} " +
-                              "message using default client,");
+                              "message using default client (specify status),");
+            Console.WriteLine($"type 'k' [kind_num] to publish random {nameof(YandexMessageFromCore)} " +
+                              "message using default client (specify kind),");
             Console.Write($"type 'i' to publish incorrect {nameof(YandexMessageFromCore)} " +
                           "using default client to the RabbitMQ: ");
         }

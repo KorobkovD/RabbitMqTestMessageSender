@@ -1,11 +1,13 @@
 ﻿using System;
 using Domain.Entities.Payler;
+using RabbitMqTestMessageSender.RabbitFromCore;
 
 namespace RabbitMqTestMessageSender
 {
     public class YandexMessageFromCore
     {
-        public YandexMessageFromCore(bool shouldBeIncorrect = false, DealStatus dealStatus = DealStatus.Charged)
+        public YandexMessageFromCore(bool shouldBeIncorrect = false, DealStatus dealStatus = DealStatus.Charged, 
+                                     PaylerNotificationKind notificationKind = PaylerNotificationKind.Charge)
         {
             var randomizer = new Random();
 
@@ -16,11 +18,16 @@ namespace RabbitMqTestMessageSender
             Rrn = randomizer.Next(0, 999999999).ToString().PadRight(12, '0');
             AuthCode = randomizer.Next(10000000).ToString().PadLeft(6, '0');
             Amount = randomizer.Next(100, 100000);
-            Reason = dealStatus == DealStatus.Rejected ? "Payment failed" : string.Empty;
-            ReasonCode = dealStatus == DealStatus.Rejected ? "REJECTED" : string.Empty;
+            Reason = dealStatus == DealStatus.Rejected || notificationKind == PaylerNotificationKind.Declined 
+                ? "Payment failed" 
+                : string.Empty;
+            ReasonCode = dealStatus == DealStatus.Rejected || notificationKind == PaylerNotificationKind.Declined
+                ? "REJECTED" 
+                : string.Empty;
             Eci = randomizer.Next() % 2 == 0 ? randomizer.Next(1, 9).ToString().PadLeft(2, '0') : null;
             MessageId = Guid.NewGuid().ToString();
             Time = DateTime.Now;
+            Kind = notificationKind;
         }
 
         /// <summary>
@@ -60,5 +67,7 @@ namespace RabbitMqTestMessageSender
         public string Rrn { get; set; }
 
         public string AuthCode { get; set; }
+
+        public PaylerNotificationKind Kind { get; set; }
     }
 }
